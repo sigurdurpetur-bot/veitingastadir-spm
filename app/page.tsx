@@ -22,13 +22,13 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeRegion, setActiveRegion] = useState("Ísland");
   const [selectedMood, setSelectedMood] = useState("Allt");
-  const [maxDistance, setMaxDistance] = useState(50); 
+  const [maxDistance, setMaxDistance] = useState(15); // Default nær
   const [userPos, setUserPos] = useState<{lat: number, lng: number} | null>(null);
-  const [hhOnly, setHhOnly] = useState(false);
-  const [map, setMap] = useState<any>(null);
   const [isClient, setIsClient] = useState(false);
+  const [map, setMap] = useState<any>(null);
   const [icon, setIcon] = useState<any>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const themeGold = "#D4AF37"; 
 
@@ -40,20 +40,26 @@ export default function Home() {
     }
     fetchData();
 
+    // Snjall GPS skynjari - Kerfið lærir hvar þú ert
     if (typeof window !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
+      navigator.geolocation.watchPosition((pos) => {
         setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      });
+      }, (err) => console.log("GPS Blocked"), { enableHighAccuracy: true });
     }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
 
     import('leaflet').then((L) => {
       setIcon(L.icon({ 
         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', 
         iconSize: [25, 41], 
-        iconAnchor: [12, 41],
-        className: 'custom-marker'
+        iconAnchor: [12, 41]
       }));
     });
+    return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -69,114 +75,115 @@ export default function Home() {
       const isBali = Number(res.lat) < 0;
       const regionMatch = activeRegion === "Bali" ? isBali : !isBali;
       const searchMatch = res.name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const moodVal = (res['best for'] || res.mood || "").toLowerCase();
-      const moodMatch = selectedMood === "Allt" || moodVal.includes(selectedMood.toLowerCase());
-      const hhMatch = !hhOnly || (res['happy hour time'] && res['happy hour time'] !== "Nei");
+      const moodMatch = selectedMood === "Allt" || (res['best for'] || "").toLowerCase().includes(selectedMood.toLowerCase());
       
       let distanceMatch = true;
-      if (userPos && activeRegion === "Ísland" && res.lat && maxDistance < 50) {
+      if (userPos && activeRegion === "Ísland" && res.lat) {
         const dist = calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng);
         distanceMatch = dist <= maxDistance;
       }
-      return regionMatch && searchMatch && moodMatch && hhMatch && distanceMatch;
+      return regionMatch && searchMatch && moodMatch && distanceMatch;
     });
-  }, [restaurants, activeRegion, searchTerm, selectedMood, maxDistance, userPos, hhOnly]);
+  }, [restaurants, activeRegion, searchTerm, selectedMood, maxDistance, userPos]);
 
   if (!isClient) return null;
 
   return (
-    <main className="min-h-screen bg-[#0A0A0B] text-white selection:bg-[#D4AF37]/30">
+    <main className="min-h-screen bg-[#050505] text-white overflow-hidden selection:bg-[#D4AF37]/30">
       
-      {/* LUXURY NAV */}
-      <nav className="fixed top-0 w-full bg-[#0A0A0B]/80 backdrop-blur-xl border-b border-white/5 z-[100] px-6 py-6 md:py-8">
-        <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-8">
+      {/* LIFANDI BAKGRUNNUR - Glow sem fylgir músinni */}
+      <div 
+        className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-1000"
+        style={{
+          background: `radial-gradient(circle 600px at ${mousePos.x}px ${mousePos.y}px, rgba(212,175,55,0.07), transparent)`
+        }}
+      />
+
+      {/* NAVIGATION */}
+      <nav className="fixed top-0 w-full bg-black/60 backdrop-blur-2xl border-b border-white/5 z-[100] px-6 py-6">
+        <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-6">
           <div className="text-center lg:text-left">
             <h1 className="text-3xl md:text-5xl font-serif tracking-tighter uppercase italic">
-              VIBE<span style={{ color: themeGold }}>.SPM</span>
+              VIBE<span style={{ color: themeGold }} className="animate-pulse">.SPM</span>
             </h1>
-            <p className="text-[10px] tracking-[0.4em] opacity-40 uppercase mt-2">Curated Lifestyle Experience</p>
+            <div className="flex items-center gap-2 mt-1 opacity-40 justify-center lg:justify-start">
+              <span className={`w-2 h-2 rounded-full ${userPos ? 'bg-green-500 animate-ping' : 'bg-red-500'}`} />
+              <span className="text-[9px] tracking-[0.3em] uppercase">
+                {userPos ? `User Connected: ${activeRegion}` : "Locating Connection..."}
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-4">
-            <div className="flex bg-white/5 p-1 rounded-full border border-white/10">
-              {["Ísland", "Bali"].map(r => (
-                <button key={r} onClick={() => setActiveRegion(r)} className={`px-8 py-2 rounded-full text-xs font-black tracking-widest transition-all ${activeRegion === r ? 'bg-[#D4AF37] text-black' : 'text-white/40 hover:text-white'}`}>{r.toUpperCase()}</button>
-              ))}
+          {/* DISTANCE SLIDER - Núna mjög áberandi */}
+          {activeRegion === "Ísland" && (
+            <div className="flex flex-col items-center bg-white/5 border border-white/10 rounded-3xl px-8 py-3 w-full lg:w-80">
+              <span className="text-[10px] font-black text-[#D4AF37] uppercase mb-1">Radar Range: {maxDistance}km</span>
+              <input 
+                type="range" min="1" max="50" value={maxDistance} 
+                onChange={(e) => setMaxDistance(parseInt(e.target.value))}
+                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]" 
+              />
             </div>
-            <input 
-              type="text" 
-              placeholder="Hvað viltu finna?..." 
-              className="bg-white/5 border border-white/10 rounded-full px-8 py-3 outline-none focus:border-[#D4AF37]/50 transition-all w-64 text-sm"
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          )}
+
+          <div className="flex gap-4 bg-white/5 p-1 rounded-full border border-white/10">
+            {["Ísland", "Bali"].map(r => (
+              <button key={r} onClick={() => setActiveRegion(r)} className={`px-8 py-2 rounded-full text-[10px] font-black transition-all ${activeRegion === r ? 'bg-[#D4AF37] text-black shadow-lg shadow-gold/20' : 'text-white/40'}`}>{r.toUpperCase()}</button>
+            ))}
           </div>
         </div>
       </nav>
 
-      <div className="pt-[260px] lg:pt-[160px] flex flex-col lg:flex-row h-screen">
+      <div className="pt-[280px] lg:pt-[160px] flex flex-col lg:flex-row h-screen relative z-10">
         
-        {/* MAIN CONTENT */}
         <div className={`${showMapMobile ? 'hidden' : 'block'} w-full lg:w-[60%] overflow-y-auto px-6 md:px-12 pb-40 no-scrollbar`}>
           
-          {/* THE MOOD SELECTOR */}
-          <div className="mb-16 overflow-x-auto no-scrollbar py-4">
-            <div className="flex gap-4 min-w-max">
-              {["Allt", "Rómantík", "Viðskipti", "Vini", "Fjölskylda", "Skyndibiti"].map(mood => (
+          {/* SEARCH & MOOD */}
+          <div className="flex flex-col md:flex-row gap-6 mb-12">
+            <input 
+              type="text" placeholder="Scanning for vibes..." 
+              className="bg-white/5 border border-white/10 rounded-2xl px-8 py-4 outline-none focus:border-[#D4AF37]/50 transition-all flex-1 text-lg font-serif italic"
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
+              {["Allt", "Rómantík", "Vini", "Dýrt"].map(mood => (
                 <button 
-                  key={mood} 
-                  onClick={() => setSelectedMood(mood)}
-                  className={`px-8 py-4 rounded-2xl border transition-all duration-500 ${selectedMood === mood ? 'bg-[#D4AF37] border-[#D4AF37] text-black shadow-[0_0_30px_rgba(212,175,55,0.3)]' : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'}`}
+                  key={mood} onClick={() => setSelectedMood(mood)}
+                  className={`px-6 py-3 rounded-xl border text-[10px] font-black transition-all ${selectedMood === mood ? 'bg-white text-black border-white' : 'border-white/10 text-white/40'}`}
                 >
-                  <span className="text-[10px] font-black tracking-[0.2em] uppercase">{mood}</span>
+                  {mood.toUpperCase()}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* RESTAURANT CARDS */}
-          <div className="grid grid-cols-1 gap-12">
+          {/* LIST */}
+          <div className="space-y-12">
             <AnimatePresence mode="popLayout">
-              {filtered.map((res) => (
+              {filtered.map((res, index) => (
                 <motion.div 
-                  key={res.id} 
-                  layout 
-                  initial={{ opacity: 0, y: 30 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  className="group relative bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden hover:bg-white/[0.04] transition-all duration-700 cursor-pointer"
+                  key={res.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="group relative bg-gradient-to-r from-white/[0.03] to-transparent border-l-2 border-white/5 p-8 md:p-10 hover:border-[#D4AF37] transition-all duration-500"
                   onClick={() => res.lat && map?.flyTo([res.lat, res.lng], 16)}
                 >
-                  <div className="flex flex-col md:flex-row p-8 md:p-10 gap-10">
-                    <div className="relative w-full md:w-48 h-48 rounded-3xl overflow-hidden bg-black shrink-0">
-                      <img src={res.image} className="w-full h-full object-contain opacity-80 group-hover:scale-110 transition-transform duration-700" alt={res.name} />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="flex flex-col md:flex-row gap-10 items-center">
+                    <div className="w-32 h-32 rounded-full border border-white/10 p-4 bg-black/40 group-hover:scale-110 transition-transform duration-700">
+                      <img src={res.image} className="w-full h-full object-contain filter grayscale group-hover:grayscale-0 transition-all" alt={res.name} />
                     </div>
-
-                    <div className="flex-1 flex flex-col justify-center">
-                      <div className="flex items-center gap-6 mb-4">
-                        <span className="text-3xl font-serif italic text-[#D4AF37]">★ {res.rating}</span>
-                        {userPos && res.lat && activeRegion === "Ísland" && (
-                          <span className="text-[10px] font-black tracking-widest text-white/30 bg-white/5 px-4 py-1 rounded-full uppercase">
-                            {calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng).toFixed(1)} km away
+                    <div className="flex-1 text-center md:text-left">
+                      <div className="flex items-center gap-4 mb-2 justify-center md:justify-start">
+                        <span className="text-2xl font-serif text-[#D4AF37]">★ {res.rating}</span>
+                        {userPos && res.lat && (
+                          <span className="text-[10px] font-bold tracking-widest text-white/20 uppercase">
+                            Distance: {calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng).toFixed(1)} KM
                           </span>
                         )}
                       </div>
-                      <h2 className="text-4xl md:text-6xl font-serif tracking-tight mb-4 group-hover:translate-x-2 transition-transform duration-500">{res.name}</h2>
-                      <p className="text-white/40 text-xl font-serif italic leading-relaxed mb-8 max-w-2xl">"{res.reviews || res.review}"</p>
-                      
-                      <div className="flex flex-wrap gap-8 pt-8 border-t border-white/5">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Timing</span>
-                          <span className="text-xs font-bold">{res['opening hours']}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Pricing</span>
-                          <span className="text-xs font-bold text-[#D4AF37]">{res.price || res.cost}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] mb-1">Vibe</span>
-                          <span className="text-xs font-bold opacity-60">{res.category}</span>
-                        </div>
-                      </div>
+                      <h2 className="text-4xl md:text-6xl font-serif mb-4 tracking-tighter group-hover:italic transition-all">{res.name}</h2>
+                      <p className="text-white/50 text-xl font-serif italic leading-relaxed">"{res.reviews || res.review}"</p>
                     </div>
                   </div>
                 </motion.div>
@@ -185,15 +192,13 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CINEMATIC MAP */}
-        <div className={`${showMapMobile ? 'block' : 'hidden'} lg:block w-full lg:w-[40%] h-full fixed lg:sticky bottom-0 lg:top-0 border-l border-white/5`}>
-          <MapContainer center={[64.1467, -21.9333]} zoom={13} className="h-full w-full invert-[0.9] hue-rotate-[180deg] brightness-[0.6] grayscale-[0.5]" ref={setMap}>
+        {/* MAP */}
+        <div className={`${showMapMobile ? 'block' : 'hidden'} lg:block w-full lg:w-[40%] h-full border-l border-white/5`}>
+          <MapContainer center={[64.1467, -21.9333]} zoom={13} className="h-full w-full invert-[0.9] hue-rotate-[180deg] opacity-60" ref={setMap}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png" />
             {filtered.map((res) => (
               res.lat && (
-                <Marker key={res.id} position={[Number(res.lat), Number(res.lng)]} icon={icon}>
-                  <Popup className="dark-popup"><div className="font-serif p-2 text-black">{res.name}</div></Popup>
-                </Marker>
+                <Marker key={res.id} position={[Number(res.lat), Number(res.lng)]} icon={icon} />
               )
             ))}
           </MapContainer>
@@ -202,9 +207,9 @@ export default function Home() {
         {/* MOBILE TOGGLE */}
         <button 
           onClick={() => setShowMapMobile(!showMapMobile)}
-          className="lg:hidden fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#D4AF37] text-black px-12 py-5 rounded-full font-black text-xs tracking-[0.2em] shadow-2xl z-[200]"
+          className="lg:hidden fixed bottom-8 right-8 bg-white text-black w-16 h-16 rounded-full font-black text-[10px] z-[200] shadow-2xl flex items-center justify-center border-4 border-black"
         >
-          {showMapMobile ? "BACK TO LIST" : "EXPLORE MAP"}
+          {showMapMobile ? "LIST" : "MAP"}
         </button>
       </div>
     </main>
