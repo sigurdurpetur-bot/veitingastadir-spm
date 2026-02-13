@@ -28,9 +28,8 @@ export default function Home() {
   const [maxDistance, setMaxDistance] = useState(50); 
   const [userPos, setUserPos] = useState<{lat: number, lng: number} | null>(null);
   const [hhOnly, setHhOnly] = useState(false);
-  const [openNow, setOpenNow] = useState(false);
-  const [map, setMap] = useState<any>(null);
   const [isClient, setIsClient] = useState(false);
+  const [map, setMap] = useState<any>(null);
   const [icon, setIcon] = useState<any>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
 
@@ -48,7 +47,7 @@ export default function Home() {
     if (typeof window !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
         setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      });
+      }, (err) => console.log("GPS error:", err));
     }
 
     import('leaflet').then((L) => {
@@ -72,18 +71,27 @@ export default function Home() {
     return restaurants.filter(res => {
       const isBali = Number(res.lat) < 0;
       const regionMatch = activeRegion === "Bali" ? isBali : !isBali;
+      
       const searchMatch = res.name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const moodMatch = selectedMood === "Allt" || (res['best for'] || "").toLowerCase().includes(selectedMood.toLowerCase());
+      
+      // LAGFÆRING Á MOOD SÍU
+      const moodVal = (res['best for'] || res.mood || "").toLowerCase();
+      const moodMatch = selectedMood === "Allt" || moodVal.includes(selectedMood.toLowerCase());
+      
       const catMatch = selectedCat === "Allt" || res.category === selectedCat;
-      const priceMatch = selectedPrice === "Allt" || (res.price || "").toLowerCase().includes(selectedPrice.toLowerCase());
+      
+      const priceVal = (res.price || res.cost || "").toLowerCase();
+      const priceMatch = selectedPrice === "Allt" || priceVal.includes(selectedPrice.toLowerCase());
+      
       const ratingMatch = parseFloat(res.rating?.split('/')[0] || "0") >= minRating;
       const hhMatch = !hhOnly || (res['happy hour time'] && res['happy hour time'] !== "Nei");
       
       let distanceMatch = true;
-      if (userPos && activeRegion === "Ísland" && res.lat) {
+      if (userPos && activeRegion === "Ísland" && res.lat && maxDistance < 50) {
         const dist = calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng);
-        distanceMatch = maxDistance === 50 || dist <= maxDistance;
+        distanceMatch = dist <= maxDistance;
       }
+      
       return regionMatch && searchMatch && moodMatch && catMatch && priceMatch && ratingMatch && hhMatch && distanceMatch;
     });
   }, [restaurants, activeRegion, searchTerm, selectedCat, selectedMood, selectedPrice, minRating, maxDistance, userPos, hhOnly]);
@@ -93,7 +101,6 @@ export default function Home() {
   return (
     <main style={{ backgroundColor: bgSoft }} className="min-h-screen text-[#2D2D2A] font-normal">
       
-      {/* NAVIGATION - Responsive Design */}
       <nav className="fixed top-0 w-full bg-[#1A1A18] border-b border-white/10 z-[100] px-4 md:px-8 py-4 md:py-6 shadow-2xl">
         <div className="max-w-[1800px] mx-auto flex flex-col gap-4 lg:flex-row items-center justify-between">
           <h1 className="text-2xl md:text-4xl font-serif tracking-[0.1em] uppercase text-white cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
@@ -113,7 +120,7 @@ export default function Home() {
               🍺 HAPPY HOUR
             </button>
             <button onClick={() => setShowMapMobile(!showMapMobile)} className="lg:hidden flex-1 px-4 py-3 rounded-full text-[10px] font-black tracking-widest bg-white/10 text-white border border-white/20">
-              {showMapMobile ? "SÝNA LISTA" : "SÝNA KORT"}
+              {showMapMobile ? "LISTI" : "KORT"}
             </button>
           </div>
         </div>
@@ -121,89 +128,83 @@ export default function Home() {
 
       <div className="pt-[220px] md:pt-[240px] lg:pt-[130px] flex flex-col lg:flex-row h-screen">
         
-        {/* LIST - Fyllir skjáinn á síma nema kortið sé virkt */}
         <div className={`${showMapMobile ? 'hidden' : 'block'} w-full lg:w-[60%] overflow-y-auto px-4 md:px-12 pb-40 no-scrollbar`}>
           
-          {/* FILTER BOX */}
-          <div className="mb-8 bg-white/60 backdrop-blur-md p-6 md:p-8 rounded-3xl border border-black/5">
-            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
-              <div className="col-span-2 md:col-span-1">
+          <div className="mb-8 bg-white/60 backdrop-blur-md p-6 md:p-8 rounded-3xl border border-black/5 shadow-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
+              <div className="col-span-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2 block">Andrúmsloft</span>
-                <select onChange={(e) => setSelectedMood(e.target.value)} className="w-full bg-transparent border-b border-black/10 py-1 font-bold text-sm md:text-lg outline-none">
-                  {["Allt", "Rómantík", "Viðskipti", "Vini", "Fjölskylda"].map(m => <option key={m} value={m}>{m}</option>)}
+                <select value={selectedMood} onChange={(e) => setSelectedMood(e.target.value)} className="w-full bg-transparent border-b border-black/10 py-1 font-bold text-sm md:text-lg outline-none">
+                  {["Allt", "Rómantík", "Viðskipti", "Vini", "Fjölskylda", "Skyndibiti"].map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2 block">Verð</span>
-                <select onChange={(e) => setSelectedPrice(e.target.value)} className="w-full bg-transparent border-b border-black/10 py-1 font-bold text-sm outline-none">
+                <select value={selectedPrice} onChange={(e) => setSelectedPrice(e.target.value)} className="w-full bg-transparent border-b border-black/10 py-1 font-bold text-sm outline-none">
                   {["Allt", "Lágt", "Miðlungs", "Dýrt"].map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
 
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2 block">Einkunn</span>
-                <select onChange={(e) => setMinRating(parseFloat(e.target.value))} className="w-full bg-transparent border-b border-black/10 py-1 font-bold text-sm outline-none">
+                <select value={minRating} onChange={(e) => setMinRating(parseFloat(e.target.value))} className="w-full bg-transparent border-b border-black/10 py-1 font-bold text-sm outline-none">
                   {[0, 4, 4.5].map(r => <option key={r} value={r}>{r === 0 ? "Allt" : `${r} ★`}</option>)}
                 </select>
               </div>
 
               {activeRegion === "Ísland" && (
-                <div className="col-span-2 lg:col-span-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C5A059] mb-2 block">Fjarlægð: {maxDistance}km</span>
+                <div className="col-span-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C5A059] mb-2 block">Fjarlægð: {maxDistance === 50 ? "Öll" : `${maxDistance}km`}</span>
                   <input type="range" min="1" max="50" value={maxDistance} onChange={(e) => setMaxDistance(parseInt(e.target.value))} className="w-full h-2 bg-black/10 rounded-lg appearance-none cursor-pointer accent-[#C5A059]" />
                 </div>
               )}
             </div>
           </div>
 
-          {/* RESTAURANT CARDS - Stærri og betri á síma */}
-          <div className="space-y-6 md:space-y-10">
+          <div className="space-y-6">
             <AnimatePresence mode="popLayout">
-              {filtered.map((res) => (
-                <motion.div key={res.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} 
-                  className="group bg-white/40 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-black/5 active:scale-[0.98] transition-all"
-                  onClick={() => {
-                    if (res.lat) {
-                      if (window.innerWidth < 1024) setShowMapMobile(true);
-                      setTimeout(() => map?.flyTo([res.lat, res.lng], 16), 100);
-                    }
-                  }}>
-                  <div className="flex flex-row gap-4 md:gap-8 items-start">
-                    <div className="w-20 h-20 md:w-28 md:h-28 rounded-xl overflow-hidden bg-white shadow-md p-3 shrink-0">
-                      <img src={res.image} className="w-full h-full object-contain" alt={res.name} />
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[#C5A059] font-bold text-lg md:text-2xl">★ {res.rating}</span>
-                        {userPos && res.lat && activeRegion === "Ísland" && (
-                          <span className="text-[9px] md:text-xs font-bold bg-black/5 px-2 py-1 rounded-full text-zinc-500">{calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng).toFixed(1)} km</span>
-                        )}
+              {filtered.length > 0 ? (
+                filtered.map((res) => (
+                  <motion.div key={res.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} 
+                    className="group bg-white/40 p-6 md:p-8 rounded-[1.5rem] border border-black/5 hover:bg-white/60 transition-all cursor-pointer"
+                    onClick={() => res.lat && map?.flyTo([res.lat, res.lng], 16)}>
+                    <div className="flex flex-row gap-4 md:gap-8 items-start">
+                      <div className="w-20 h-20 md:w-28 md:h-28 rounded-xl overflow-hidden bg-white shadow-md p-3 shrink-0">
+                        <img src={res.image} className="w-full h-full object-contain" alt={res.name} />
                       </div>
-                      <h2 className="text-xl md:text-4xl font-serif font-bold text-[#1A1A18] mb-2 leading-tight">{res.name}</h2>
-                      <p className="text-[#4A4A44] text-sm md:text-xl font-serif italic leading-snug mb-4 line-clamp-3">"{res.reviews || res.review}"</p>
-                      
-                      <div className="flex flex-wrap gap-4 text-[10px] md:text-sm font-bold text-zinc-500 uppercase tracking-tighter">
-                        <span>🕒 {res['opening hours']}</span>
-                        <span>💰 {res.price || res.cost}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[#C5A059] font-bold text-lg md:text-2xl">★ {res.rating}</span>
+                          {userPos && res.lat && activeRegion === "Ísland" && (
+                            <span className="text-[9px] md:text-xs font-bold bg-black/5 px-2 py-1 rounded-full text-zinc-400">{calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng).toFixed(1)} km</span>
+                          )}
+                        </div>
+                        <h2 className="text-xl md:text-3xl font-serif font-bold text-[#1A1A18] mb-2">{res.name}</h2>
+                        <p className="text-[#4A4A44] text-sm md:text-lg font-serif italic mb-4 opacity-80 leading-snug">"{res.reviews || res.review}"</p>
+                        <div className="flex flex-wrap gap-4 text-[10px] md:text-xs font-bold text-zinc-400 uppercase">
+                          <span>🕒 {res['opening hours']}</span>
+                          <span>💰 {res.price || res.cost}</span>
+                          <span className="text-[#C5A059]">{res.category}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center py-20 opacity-40 font-serif italic text-2xl">Engir staðir fundust með þessum síum...</div>
+              )}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* MAP - Felst á síma nema ýtt sé á "Sýna kort" */}
         <div className={`${showMapMobile ? 'block' : 'hidden'} lg:block w-full lg:w-[40%] h-[60vh] lg:h-full fixed lg:sticky bottom-0 lg:top-0 border-l border-black/5 z-[50]`}>
           <MapContainer center={[64.1467, -21.9333]} zoom={13} className="h-full w-full grayscale-[0.3]" ref={setMap}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
             {filtered.map((res) => (
               res.lat && (
                 <Marker key={res.id} position={[Number(res.lat), Number(res.lng)]} icon={icon}>
-                  <Popup><div className="font-bold text-sm p-1">{res.name}</div></Popup>
+                  <Popup><div className="font-bold p-1">{res.name}</div></Popup>
                 </Marker>
               )
             ))}
