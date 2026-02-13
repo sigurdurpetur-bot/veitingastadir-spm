@@ -7,13 +7,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dynamicImport from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 
-// Supabase tenging
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!, 
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Kortahlutar hlaðnir inn með ssr: false til að koma í veg fyrir build-villur
 const MapContainer = dynamicImport(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
 const TileLayer = dynamicImport(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamicImport(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
@@ -35,8 +33,8 @@ export default function Home() {
   const [isClient, setIsClient] = useState(false);
   const [icon, setIcon] = useState<any>(null);
 
-  const isIsland = activeRegion === "Ísland";
-  const themeGold = "#D4AF37";
+  const themeGold = "#C5A059"; // Mýkri gull litur
+  const bgSoft = activeRegion === "Ísland" ? "#F4F1EE" : "#EBE7E0"; // Mjúkur drappaður bakgrunnur
 
   useEffect(() => {
     setIsClient(true);
@@ -59,7 +57,7 @@ export default function Home() {
         iconAnchor: [10, 32] 
       }));
     });
-  }, []);
+  }, [activeRegion]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371;
@@ -69,148 +67,113 @@ export default function Home() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   };
 
-  const checkIfOpen = (hours: string) => {
-    if (!hours || hours === "Lokað" || hours === "Nei") return false;
-    try {
-      const now = new Date();
-      const currentMin = now.getHours() * 60 + now.getMinutes();
-      const [start, end] = hours.split('-').map(t => {
-        const [h, m] = t.trim().split(':').map(Number);
-        return h * 60 + m;
-      });
-      return currentMin >= start && currentMin <= end;
-    } catch { return false; }
-  };
-
   const filtered = useMemo(() => {
     return restaurants.filter(res => {
       const isBali = Number(res.lat) < 0;
       const regionMatch = activeRegion === "Bali" ? isBali : !isBali;
       const searchMatch = res.name?.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const moodData = (res['best for'] || res.mood || "").toLowerCase();
-      const moodMatch = selectedMood === "Allt" || moodData.includes(selectedMood.toLowerCase());
+      const moodMatch = selectedMood === "Allt" || (res['best for'] || "").toLowerCase().includes(selectedMood.toLowerCase());
       const catMatch = selectedCat === "Allt" || res.category === selectedCat;
-      const priceData = (res.price || res.cost || "").toLowerCase();
-      const priceMatch = selectedPrice === "Allt" || priceData.includes(selectedPrice.toLowerCase());
+      const priceMatch = selectedPrice === "Allt" || (res.price || "").toLowerCase().includes(selectedPrice.toLowerCase());
       const ratingMatch = parseFloat(res.rating?.split('/')[0] || "0") >= minRating;
       const hhMatch = !hhOnly || (res['happy hour time'] && res['happy hour time'] !== "Nei");
-      const openMatch = !openNow || checkIfOpen(res['opening hours']);
-
+      
       let distanceMatch = true;
       if (userPos && activeRegion === "Ísland" && res.lat) {
         const dist = calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng);
         distanceMatch = maxDistance === 50 || dist <= maxDistance;
       }
-      
-      return regionMatch && searchMatch && moodMatch && catMatch && priceMatch && ratingMatch && hhMatch && openMatch && distanceMatch;
+      return regionMatch && searchMatch && moodMatch && catMatch && priceMatch && ratingMatch && hhMatch && distanceMatch;
     });
-  }, [restaurants, activeRegion, searchTerm, selectedCat, selectedMood, selectedPrice, minRating, maxDistance, userPos, hhOnly, openNow]);
+  }, [restaurants, activeRegion, searchTerm, selectedCat, selectedMood, selectedPrice, minRating, maxDistance, userPos, hhOnly]);
 
   if (!isClient) return null;
 
   return (
-    <main className={`min-h-screen ${isIsland ? 'bg-[#FBFBFA]' : 'bg-[#F9F6F1]'} text-[#1C1C1C] font-light transition-all duration-1000`}>
+    <main style={{ backgroundColor: bgSoft }} className="min-h-screen text-[#2D2D2A] font-light transition-colors duration-1000">
       
-      {/* NAVIGATION */}
-      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-2xl border-b border-zinc-100 z-[100] px-6 py-8 shadow-sm">
+      {/* NAVIGATION - Dökkari og fágaðri */}
+      <nav className="fixed top-0 w-full bg-[#1A1A18]/95 backdrop-blur-md border-b border-white/5 z-[100] px-6 py-6 shadow-2xl">
         <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-6">
-          <div className="flex flex-col items-center lg:items-start cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
-            <h1 className="text-4xl font-serif tracking-widest uppercase italic">Veitingastaðir<span style={{ color: themeGold }}>.SPM</span></h1>
+          <div className="flex flex-col cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+            <h1 className="text-3xl font-serif tracking-[0.2em] uppercase italic text-white">Veitingastaðir<span style={{ color: themeGold }}>.SPM</span></h1>
           </div>
 
-          <div className="flex items-center bg-zinc-50 border border-zinc-100 rounded-full px-8 py-4 shadow-inner">
-            <button onClick={() => {setActiveRegion("Ísland"); setSelectedMood("Allt");}} className={`text-xs font-black tracking-widest px-6 transition-all ${isIsland ? 'text-[#D4AF37]' : 'text-zinc-300'}`}>ÍSLAND</button>
-            <div className="w-[1px] h-6 bg-zinc-200 mx-4" />
-            <button onClick={() => {setActiveRegion("Bali"); setSelectedMood("Allt");}} className={`text-xs font-black tracking-widest px-6 transition-all ${!isIsland ? 'text-[#D4AF37]' : 'text-zinc-300'}`}>BALI</button>
-            <div className="w-[1px] h-6 bg-zinc-200 mx-4" />
-            <input type="text" placeholder="Leita að stað..." className="bg-transparent text-sm font-medium outline-none w-64" onChange={(e) => setSearchTerm(e.target.value)} />
+          <div className="flex items-center bg-white/5 border border-white/10 rounded-full px-6 py-3">
+            <button onClick={() => setActiveRegion("Ísland")} className={`text-[10px] font-black tracking-widest px-4 transition-all ${activeRegion === "Ísland" ? 'text-[#C5A059]' : 'text-zinc-500'}`}>ÍSLAND</button>
+            <div className="w-[1px] h-4 bg-white/10 mx-2" />
+            <button onClick={() => setActiveRegion("Bali")} className={`text-[10px] font-black tracking-widest px-4 transition-all ${activeRegion === "Bali" ? 'text-[#C5A059]' : 'text-zinc-500'}`}>BALI</button>
+            <div className="w-[1px] h-4 bg-white/10 mx-4" />
+            <input type="text" placeholder="Leita..." className="bg-transparent text-white text-sm outline-none w-48 placeholder:text-zinc-600" onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
 
-          <div className="flex gap-6">
-            <button onClick={() => setOpenNow(!openNow)} className={`flex items-center gap-4 px-10 py-5 rounded-full text-xs font-black tracking-widest transition-all shadow-xl ${openNow ? 'bg-green-600 text-white' : 'bg-white text-zinc-400 border border-zinc-100'}`}>
-              <span className={`w-3 h-3 rounded-full ${openNow ? 'bg-white animate-pulse' : 'bg-green-500'}`} /> OPIÐ NÚNA
-            </button>
-            <button onClick={() => setHhOnly(!hhOnly)} className={`flex items-center gap-4 px-10 py-5 rounded-full text-xs font-black tracking-widest transition-all shadow-xl ${hhOnly ? 'bg-[#D4AF37] text-white' : 'bg-white text-zinc-400 border border-zinc-100'}`}>
+          <div className="flex gap-4">
+            <button onClick={() => setHhOnly(!hhOnly)} className={`px-6 py-3 rounded-full text-[10px] font-black tracking-widest transition-all ${hhOnly ? 'bg-[#C5A059] text-white' : 'bg-white/5 text-zinc-400 border border-white/10'}`}>
               🍺 HAPPY HOUR
             </button>
           </div>
         </div>
       </nav>
 
-      <div className="pt-[220px] lg:pt-[150px] flex flex-col lg:flex-row h-screen overflow-hidden">
+      <div className="pt-[180px] lg:pt-[120px] flex flex-col lg:flex-row h-screen">
         
-        <div className="w-full lg:w-[70%] overflow-y-auto px-8 md:px-20 pb-40 no-scrollbar">
+        <div className="w-full lg:w-[65%] overflow-y-auto px-6 md:px-16 pb-40 no-scrollbar">
           
-          <div className="space-y-12 mb-20 bg-white/50 p-10 rounded-[3rem] border border-zinc-100 shadow-sm">
-            
-            <div>
-              <span className="text-xs font-black uppercase tracking-[0.3em] opacity-40 mb-6 block">Best fyrir</span>
-              <div className="flex gap-8 overflow-x-auto no-scrollbar py-2">
-                {["Allt", "Rómantík", "Viðskipti", "Vini", "Fjölskylda", "Skyndibiti"].map(mood => (
-                  <button key={mood} onClick={() => setSelectedMood(mood)} className={`text-sm font-black uppercase tracking-widest transition-all whitespace-nowrap ${selectedMood === mood ? 'text-[#D4AF37] border-b-4 border-[#D4AF37] pb-2' : 'text-zinc-300 hover:text-zinc-500'}`}>{mood}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          {/* FILTER BOX - Mýkri lúxus lúkk */}
+          <div className="mb-16 bg-[#FDFCFB]/40 backdrop-blur-sm p-10 rounded-[2rem] border border-black/5 shadow-inner">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
               <div>
-                <span className="text-xs font-black uppercase tracking-[0.3em] opacity-40 mb-4 block">Tegund</span>
-                <select onChange={(e) => setSelectedCat(e.target.value)} className="w-full bg-transparent border-b-2 border-zinc-200 text-sm font-bold py-2 outline-none">
-                  <option value="Allt">Allt</option>
-                  {Array.from(new Set(restaurants.map(r => r.category))).filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <span className="text-xs font-black uppercase tracking-[0.3em] mb-4 block" style={{ color: themeGold }}>Lágmarks Einkunn</span>
-                <div className="flex gap-3">
-                  {[0, 3, 4, 4.5].map(r => (
-                    <button key={r} onClick={() => setMinRating(r)} className={`text-[10px] font-black px-4 py-2 rounded-xl border-2 transition-all ${minRating === r ? 'bg-zinc-900 text-white' : 'border-zinc-100 text-zinc-300'}`}>{r === 0 ? 'Allt' : `${r} ★`}</button>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-4 block">Andrúmsloft</span>
+                <div className="flex flex-wrap gap-4">
+                  {["Allt", "Rómantík", "Viðskipti", "Vini"].map(mood => (
+                    <button key={mood} onClick={() => setSelectedMood(mood)} className={`text-[10px] font-bold uppercase ${selectedMood === mood ? 'text-[#C5A059] border-b border-[#C5A059]' : 'text-zinc-400'}`}>{mood}</button>
                   ))}
                 </div>
               </div>
-
+              
               <div>
-                <span className="text-xs font-black uppercase tracking-[0.3em] opacity-40 mb-4 block">Verðflokkur</span>
-                <div className="flex gap-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-4 block">Verðflokkur</span>
+                <div className="flex gap-2">
                   {["Allt", "Lágt", "Miðlungs", "Dýrt"].map(p => (
-                    <button key={p} onClick={() => setSelectedPrice(p)} className={`text-[10px] font-black px-4 py-2 rounded-xl border-2 transition-all ${selectedPrice === p ? 'bg-[#D4AF37] text-white border-[#D4AF37]' : 'border-zinc-100 text-zinc-300'}`}>{p}</button>
+                    <button key={p} onClick={() => setSelectedPrice(p)} className={`px-3 py-1 rounded-md text-[9px] font-bold border ${selectedPrice === p ? 'bg-[#2D2D2A] text-white border-[#2D2D2A]' : 'border-black/10 text-zinc-500'}`}>{p}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-4 block">Lágmarks Einkunn</span>
+                <div className="flex gap-2">
+                  {[0, 4, 4.5].map(r => (
+                    <button key={r} onClick={() => setMinRating(r)} className={`px-3 py-1 rounded-md text-[9px] font-bold border ${minRating === r ? 'bg-[#C5A059] text-white border-[#C5A059]' : 'border-black/10 text-zinc-500'}`}>{r === 0 ? 'Allt' : `${r} ★`}</button>
                   ))}
                 </div>
               </div>
             </div>
-
-            {userPos && isIsland && (
-              <div className="pt-4">
-                <span className="text-xs font-black uppercase tracking-[0.3em] mb-6 block" style={{ color: themeGold }}>Fjarlægð frá þér: {maxDistance === 50 ? "Öll svæði" : `${maxDistance} km`}</span>
-                <input type="range" min="1" max="50" value={maxDistance} onChange={(e) => setMaxDistance(parseInt(e.target.value))} className="w-full h-2 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]" />
-              </div>
-            )}
           </div>
 
-          <div className="space-y-36">
+          {/* RESTAURANT LIST */}
+          <div className="space-y-24">
             <AnimatePresence mode="popLayout">
               {filtered.map((res) => (
-                <motion.div key={res.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col md:flex-row gap-16 items-center group cursor-pointer" onClick={() => res.lat && map?.flyTo([res.lat, res.lng], 16)}>
-                  <div className="relative w-32 h-32 rounded-full border border-zinc-100 p-6 bg-white shrink-0 shadow-sm group-hover:shadow-2xl transition-all">
-                    <img src={res.image} className="w-full h-full object-contain filter grayscale-[0.2] group-hover:grayscale-0 transition-all" alt={res.name} />
-                  </div>
-
-                  <div className="flex-1 text-center md:text-left">
-                    <div className="flex items-center gap-6 mb-6 justify-center md:justify-start">
-                      <span className="text-[#D4AF37] text-2xl font-serif italic font-bold">★ {res.rating}</span>
-                      {userPos && res.lat && isIsland && (
-                        <span className="text-[10px] font-black bg-zinc-100 px-3 py-1 rounded-full text-zinc-400">📍 {calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng).toFixed(1)} km</span>
-                      )}
+                <motion.div key={res.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="group relative" onClick={() => res.lat && map?.flyTo([res.lat, res.lng], 16)}>
+                  <div className="flex flex-col md:flex-row gap-12 items-start transition-all duration-500 group-hover:translate-x-2">
+                    <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-white shadow-lg p-4 shrink-0 border border-black/5">
+                      <img src={res.image} className="w-full h-full object-contain mix-blend-multiply opacity-80 group-hover:opacity-100 transition-opacity" alt={res.name} />
                     </div>
-                    <h2 className="text-5xl md:text-6xl font-serif tracking-tight group-hover:text-[#D4AF37] transition-colors duration-500 mb-8">{res.name}</h2>
-                    <p className="text-zinc-600 text-xl md:text-2xl font-serif italic mb-10 opacity-80 leading-relaxed">"{res.reviews || res.review}"</p>
-                    
-                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-12 pt-10 border-t border-zinc-50 opacity-40 group-hover:opacity-100 transition-opacity">
-                      <span className="text-sm font-bold">💰 {res.price || res.cost || "Verð vantar"}</span>
-                      <span className="text-lg font-black text-zinc-900">🕒 {res['opening hours']}</span>
-                      {res.website && <a href={`https://${res.website.replace('https://', '')}`} target="_blank" onClick={(e) => e.stopPropagation()} className="text-xs font-black border-b-2 border-zinc-200 pb-1 hover:border-zinc-900 uppercase">Vefsíða</a>}
+
+                    <div className="flex-1">
+                      <div className="flex items-center gap-4 mb-3">
+                        <span className="text-[#C5A059] font-serif italic text-xl">★ {res.rating}</span>
+                        <span className="h-[1px] w-8 bg-black/10" />
+                        <span className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">{res.category}</span>
+                      </div>
+                      <h2 className="text-4xl font-serif tracking-tight text-[#1A1A18] mb-4 group-hover:text-[#C5A059] transition-colors">{res.name}</h2>
+                      <p className="text-[#5A5A54] text-lg font-serif italic leading-relaxed max-w-2xl">"{res.reviews || res.review}"</p>
+                      
+                      <div className="flex gap-8 mt-8 opacity-0 group-hover:opacity-100 transition-all duration-700">
+                        <div className="text-[10px] font-black tracking-tighter">🕒 {res['opening hours']}</div>
+                        {res.website && <a href={`https://${res.website.replace('https://', '')}`} target="_blank" className="text-[10px] font-black border-b border-black/20 pb-1 hover:border-[#C5A059] uppercase">Vefsíða</a>}
+                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -219,13 +182,14 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="hidden lg:block lg:w-[30%] h-full sticky top-0 border-l border-zinc-100">
-          <MapContainer center={[64.1467, -21.9333]} zoom={13} className="h-full w-full grayscale-[0.5]" ref={setMap}>
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png" />
+        {/* MAP - Dekkri tónar */}
+        <div className="hidden lg:block lg:w-[35%] h-full sticky top-0 border-l border-black/5 shadow-2xl">
+          <MapContainer center={[64.1467, -21.9333]} zoom={13} className="h-full w-full grayscale-[0.8] contrast-[1.1]" ref={setMap}>
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png" />
             {filtered.map((res) => (
               res.lat && (
                 <Marker key={res.id} position={[Number(res.lat), Number(res.lng)]} icon={icon}>
-                  <Popup><div className="font-serif font-bold text-center">{res.name}</div></Popup>
+                  <Popup><div className="font-serif font-bold p-2">{res.name}</div></Popup>
                 </Marker>
               )
             ))}
