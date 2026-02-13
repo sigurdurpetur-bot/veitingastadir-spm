@@ -1,16 +1,23 @@
 "use client";
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+// Supabase tenging
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
+// Kortahlutar hlaðnir inn með ssr: false til að koma í veg fyrir build-villur
+const MapContainer = dynamicImport(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
+const TileLayer = dynamicImport(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamicImport(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
+const Popup = dynamicImport(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 
 export default function Home() {
   const [restaurants, setRestaurants] = useState<any[]>([]);
@@ -39,14 +46,18 @@ export default function Home() {
     }
     fetchData();
 
-    if (navigator.geolocation) {
+    if (typeof window !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
         setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       });
     }
 
     import('leaflet').then((L) => {
-      setIcon(L.icon({ iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', iconSize: [20, 32], iconAnchor: [10, 32] }));
+      setIcon(L.icon({ 
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', 
+        iconSize: [20, 32], 
+        iconAnchor: [10, 32] 
+      }));
     });
   }, []);
 
@@ -77,7 +88,7 @@ export default function Home() {
       const regionMatch = activeRegion === "Bali" ? isBali : !isBali;
       const searchMatch = res.name?.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const moodData = (res['best for'] || "").toLowerCase();
+      const moodData = (res['best for'] || res.mood || "").toLowerCase();
       const moodMatch = selectedMood === "Allt" || moodData.includes(selectedMood.toLowerCase());
       const catMatch = selectedCat === "Allt" || res.category === selectedCat;
       const priceData = (res.price || res.cost || "").toLowerCase();
@@ -99,7 +110,7 @@ export default function Home() {
   if (!isClient) return null;
 
   return (
-    <main className={`min-h-screen ${isIsland ? 'bg-[#FBFBFA]' : 'bg-[#F9F6F1]'} text-[#1C1C1C] font-light transition-colors duration-1000`}>
+    <main className={`min-h-screen ${isIsland ? 'bg-[#FBFBFA]' : 'bg-[#F9F6F1]'} text-[#1C1C1C] font-light transition-all duration-1000`}>
       
       {/* NAVIGATION */}
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-2xl border-b border-zinc-100 z-[100] px-6 py-8 shadow-sm">
@@ -129,13 +140,10 @@ export default function Home() {
 
       <div className="pt-[220px] lg:pt-[150px] flex flex-col lg:flex-row h-screen overflow-hidden">
         
-        {/* SIDEBAR - 70% WIDTH */}
         <div className="w-full lg:w-[70%] overflow-y-auto px-8 md:px-20 pb-40 no-scrollbar">
           
-          {/* ADVANCED CONCIERGE FILTERS */}
           <div className="space-y-12 mb-20 bg-white/50 p-10 rounded-[3rem] border border-zinc-100 shadow-sm">
             
-            {/* Best Fyrir Selector */}
             <div>
               <span className="text-xs font-black uppercase tracking-[0.3em] opacity-40 mb-6 block">Best fyrir</span>
               <div className="flex gap-8 overflow-x-auto no-scrollbar py-2">
@@ -146,7 +154,6 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-              {/* Category */}
               <div>
                 <span className="text-xs font-black uppercase tracking-[0.3em] opacity-40 mb-4 block">Tegund</span>
                 <select onChange={(e) => setSelectedCat(e.target.value)} className="w-full bg-transparent border-b-2 border-zinc-200 text-sm font-bold py-2 outline-none">
@@ -155,7 +162,6 @@ export default function Home() {
                 </select>
               </div>
 
-              {/* Rating */}
               <div>
                 <span className="text-xs font-black uppercase tracking-[0.3em] mb-4 block" style={{ color: themeGold }}>Lágmarks Einkunn</span>
                 <div className="flex gap-3">
@@ -165,7 +171,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Price */}
               <div>
                 <span className="text-xs font-black uppercase tracking-[0.3em] opacity-40 mb-4 block">Verðflokkur</span>
                 <div className="flex gap-3">
@@ -176,7 +181,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Distance Slider */}
             {userPos && isIsland && (
               <div className="pt-4">
                 <span className="text-xs font-black uppercase tracking-[0.3em] mb-6 block" style={{ color: themeGold }}>Fjarlægð frá þér: {maxDistance === 50 ? "Öll svæði" : `${maxDistance} km`}</span>
@@ -185,7 +189,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* LIST */}
           <div className="space-y-36">
             <AnimatePresence mode="popLayout">
               {filtered.map((res) => (
@@ -197,7 +200,7 @@ export default function Home() {
                   <div className="flex-1 text-center md:text-left">
                     <div className="flex items-center gap-6 mb-6 justify-center md:justify-start">
                       <span className="text-[#D4AF37] text-2xl font-serif italic font-bold">★ {res.rating}</span>
-                      {userPos && res.lat && activeRegion === "Ísland" && (
+                      {userPos && res.lat && isIsland && (
                         <span className="text-[10px] font-black bg-zinc-100 px-3 py-1 rounded-full text-zinc-400">📍 {calculateDistance(userPos.lat, userPos.lng, res.lat, res.lng).toFixed(1)} km</span>
                       )}
                     </div>
@@ -205,7 +208,7 @@ export default function Home() {
                     <p className="text-zinc-600 text-xl md:text-2xl font-serif italic mb-10 opacity-80 leading-relaxed">"{res.reviews || res.review}"</p>
                     
                     <div className="flex flex-wrap items-center justify-center md:justify-start gap-12 pt-10 border-t border-zinc-50 opacity-40 group-hover:opacity-100 transition-opacity">
-                      <span className="text-sm font-bold">💰 {res.price || res.cost}</span>
+                      <span className="text-sm font-bold">💰 {res.price || res.cost || "Verð vantar"}</span>
                       <span className="text-lg font-black text-zinc-900">🕒 {res['opening hours']}</span>
                       {res.website && <a href={`https://${res.website.replace('https://', '')}`} target="_blank" onClick={(e) => e.stopPropagation()} className="text-xs font-black border-b-2 border-zinc-200 pb-1 hover:border-zinc-900 uppercase">Vefsíða</a>}
                     </div>
@@ -216,7 +219,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* MAP */}
         <div className="hidden lg:block lg:w-[30%] h-full sticky top-0 border-l border-zinc-100">
           <MapContainer center={[64.1467, -21.9333]} zoom={13} className="h-full w-full grayscale-[0.5]" ref={setMap}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png" />
